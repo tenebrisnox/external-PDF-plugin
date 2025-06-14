@@ -8,7 +8,7 @@ This plugin lets you embed PDF files hosted online in your Obsidian notes withou
 ### For External PDFs (HTTPS URLs):
 ````
 ```external-pdf
-https:/example.com/document.pdf
+https://example.com/document.pdf
 title: My Online PDF Document
 heght: 500px
 ```
