@@ -1,0 +1,10 @@
+{
+  "id": "external-pdf",
+  "name": "External PDF",
+  "version": "0.0.3",
+  "minAppVersion": "0.15.0",
+  "description": "Embed external PDF files in notes without storing the files in your Obsdian vault.",
+  "author": "Tenebris Nox",
+  "authorUrl": "https://github.com/tenebrisnox/external-PDF-plugin",
+  "isDesktopOnly": false
+}
