@@ -1,7 +1,7 @@
 // Save this entire file as: main.ts
 import { Plugin, MarkdownPostProcessorContext, requestUrl, App, PluginSettingTab, Setting, TFile, Platform } from 'obsidian';
 
-// Node.js module types - these won't be available at runtime on mobile
+// Node.js module types - these won't be available at runtime on mobile -
 // but are useful for typings during development for desktop.
 declare let require: any; // Allow `require` for Node.js modules on desktop
 
