@@ -37,7 +37,9 @@ var DEFAULT_SETTINGS = {
   maxFileSize: 50,
   // 50MB
   pdfJsWorkerUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js",
-  defaultScale: 1.2
+  defaultScale: 1.2,
+  allowAbsolutePaths: false
+  // Default to false for security
 };
 var ExternalPDFSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -50,35 +52,51 @@ var ExternalPDFSettingTab = class extends import_obsidian.PluginSettingTab {
     containerEl.createEl("h2", { text: "External PDF Plugin" });
     const infoDiv = containerEl.createEl("div", { cls: "external-pdf-info" });
     infoDiv.innerHTML = `
-            <p><strong>Embed external PDFs directly in your notes with full viewer controls.</strong></p>
-            
+            <p><strong>Embed external PDFs, local vault PDFs, and local absolute path PDFs (desktop only) directly in your notes with full viewer controls.</strong></p>
+
             <h3>\u{1F4D6} How to Use</h3>
-            <p>Add a code block with <code>external-pdf</code> language and paste your PDF URL:</p>
-            
+            <p>Add a code block with <code>external-pdf</code> language and provide the source:</p>
+
+            <p><strong>For external PDFs (HTTPS URLs):</strong></p>
             <pre><code>\`\`\`external-pdf
 https://example.com/document.pdf
-title: My Document Title
+title: My Online Document
 height: 500px
 \`\`\`</code></pre>
-            
+
+            <p><strong>For local PDFs in your vault (relative path from vault root):</strong></p>
+            <pre><code>\`\`\`external-pdf
+Attachments/MyLocalDocument.pdf
+title: Vault PDF
+height: 400px
+\`\`\`</code></pre>
+
+            <p><strong>For local PDFs via absolute path (Desktop Only, requires enabling below):</strong></p>
+            <pre><code>\`\`\`external-pdf
+${import_obsidian.Platform.isWin ? "C:/Users/YourName/Documents/AbsoluteDoc.pdf" : "/Users/YourName/Documents/AbsoluteDoc.pdf"}
+title: Absolute Path PDF
+\`\`\`</code></pre>
+
             <h3>\u{1F527} Supported Options</h3>
             <ul>
                 <li><strong>title:</strong> Display name for the PDF</li>
                 <li><strong>height:</strong> Viewer height (e.g., 600px, 80vh, 400)</li>
             </ul>
-            
+
             <h3>\u{1F310} Supported Sources</h3>
             <ul>
+                <li>Local PDF files from your Obsidian vault (e.g., <code>Attachments/MyReport.pdf</code>)</li>
+                <li>Local PDF files via absolute path (e.g., <code>${import_obsidian.Platform.isWin ? "D:\\\\Docs\\\\report.pdf" : "/mnt/data/report.pdf"}</code>) - <strong>Desktop Only, requires enabling in settings.</strong></li>
                 <li>Google Drive (sharing links)</li>
                 <li>Dropbox (sharing links)</li>
                 <li>OneDrive (sharing links)</li>
                 <li>GitHub (raw PDF files)</li>
                 <li>Any direct HTTPS PDF URL</li>
             </ul>
-            
+
             <h3>\u{1F4F1} Features</h3>
             <ul>
-                <li>Mobile-optimized with touch gestures</li>
+                <li>Mobile-optimized with touch gestures (for URLs and vault files)</li>
                 <li>Keyboard navigation (arrows, space, +/- zoom)</li>
                 <li>Page controls and zoom options</li>
                 <li>Fit-to-width mode</li>
@@ -87,26 +105,34 @@ height: 500px
             </ul>
         `;
     containerEl.createEl("h3", { text: "Settings" });
-    new import_obsidian.Setting(containerEl).setName("Default height").setDesc("Default height for PDF viewers (e.g., 600px, 70vh)").addText((text) => text.setPlaceholder("600px").setValue(this.plugin.settings.defaultHeight).onChange(async (value) => {
-      this.plugin.settings.defaultHeight = value || "600px";
+    new import_obsidian.Setting(containerEl).setName("Default height").setDesc("Default height for PDF viewers (e.g., 600px, 70vh)").addText((text) => text.setPlaceholder(DEFAULT_SETTINGS.defaultHeight).setValue(this.plugin.settings.defaultHeight).onChange(async (value) => {
+      this.plugin.settings.defaultHeight = value || DEFAULT_SETTINGS.defaultHeight;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian.Setting(containerEl).setName("Restrict domains").setDesc("Only allow PDFs from specified domains").addToggle((toggle) => toggle.setValue(this.plugin.settings.restrictDomains).onChange(async (value) => {
+    new import_obsidian.Setting(containerEl).setName("Allow absolute local file paths (Desktop Only)").setDesc("Enable embedding PDFs using absolute file paths (e.g., /path/to/file.pdf or C:\\path\\to\\file.pdf). Use with caution: granting access to arbitrary file paths can have security implications if untrusted content is processed. This feature only works on Obsidian desktop.").addToggle((toggle) => toggle.setValue(this.plugin.settings.allowAbsolutePaths).onChange(async (value) => {
+      this.plugin.settings.allowAbsolutePaths = value;
+      await this.plugin.saveSettings();
+      this.display();
+    }));
+    if (this.plugin.settings.allowAbsolutePaths && !import_obsidian.Platform.isDesktop) {
+      containerEl.createEl("p", { text: "Warning: Absolute paths are only functional on the Obsidian desktop application.", cls: "external-pdf-warning" });
+    }
+    new import_obsidian.Setting(containerEl).setName("Restrict domains (for external URLs)").setDesc("If enabled, only allow PDFs from specified external domains. This does not apply to local vault files or absolute path files.").addToggle((toggle) => toggle.setValue(this.plugin.settings.restrictDomains).onChange(async (value) => {
       this.plugin.settings.restrictDomains = value;
       await this.plugin.saveSettings();
       this.display();
     }));
     if (this.plugin.settings.restrictDomains) {
-      new import_obsidian.Setting(containerEl).setName("Allowed domains").setDesc("Comma-separated list of allowed domains").addTextArea((text) => text.setPlaceholder("drive.google.com, dropbox.com").setValue(this.plugin.settings.allowedDomains.join(", ")).onChange(async (value) => {
-        this.plugin.settings.allowedDomains = value.split(",").map((domain) => domain.trim()).filter((domain) => domain.length > 0);
+      new import_obsidian.Setting(containerEl).setName("Allowed external domains").setDesc("Comma-separated list of allowed external domains (e.g., drive.google.com, dropbox.com).").addTextArea((text) => text.setPlaceholder(DEFAULT_SETTINGS.allowedDomains.join(", ")).setValue(this.plugin.settings.allowedDomains.join(", ")).onChange(async (value) => {
+        this.plugin.settings.allowedDomains = value.split(",").map((domain) => domain.trim().toLowerCase()).filter((domain) => domain.length > 0);
         await this.plugin.saveSettings();
       }));
     }
-    new import_obsidian.Setting(containerEl).setName("Maximum file size (MB)").setDesc("Maximum allowed PDF file size").addSlider((slider) => slider.setLimits(1, 200, 5).setValue(this.plugin.settings.maxFileSize).setDynamicTooltip().onChange(async (value) => {
+    new import_obsidian.Setting(containerEl).setName("Maximum file size (MB)").setDesc("Maximum allowed PDF file size for all sources (local vault, absolute path, external URL).").addSlider((slider) => slider.setLimits(1, 200, 5).setValue(this.plugin.settings.maxFileSize).setDynamicTooltip().onChange(async (value) => {
       this.plugin.settings.maxFileSize = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian.Setting(containerEl).setName("Default zoom scale").setDesc("Default zoom level for PDFs (1.0 = 100%)").addSlider((slider) => slider.setLimits(0.5, 3, 0.1).setValue(this.plugin.settings.defaultScale).setDynamicTooltip().onChange(async (value) => {
+    new import_obsidian.Setting(containerEl).setName("Default zoom scale").setDesc("Default zoom level for PDFs (1.0 = 100%). Applies when not on mobile or fit-to-width.").addSlider((slider) => slider.setLimits(0.5, 3, 0.1).setValue(this.plugin.settings.defaultScale).setDynamicTooltip().onChange(async (value) => {
       this.plugin.settings.defaultScale = value;
       await this.plugin.saveSettings();
     }));
@@ -115,12 +141,21 @@ height: 500px
 var ExternalPDFPlugin = class extends import_obsidian.Plugin {
   constructor() {
     super(...arguments);
-    this.stylesAdded = false;
     this.pdfJsLoaded = false;
     this.loadingPromise = null;
+    this.nodeFs = null;
+    this.nodePath = null;
   }
   async onload() {
     await this.loadSettings();
+    if (import_obsidian.Platform.isDesktop && typeof require !== "undefined") {
+      try {
+        this.nodeFs = require("fs");
+        this.nodePath = require("path");
+      } catch (e) {
+        console.warn("External PDF Plugin: Could not load Node.js 'fs' or 'path' module. Absolute path functionality will be limited.", e);
+      }
+    }
     this.addSettingTab(new ExternalPDFSettingTab(this.app, this));
     this.registerMarkdownCodeBlockProcessor("external-pdf", (source, el, ctx) => {
       this.renderExternalPDF(source, el, ctx);
@@ -134,36 +169,39 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
     await this.saveData(this.settings);
   }
   async loadPDFJS() {
-    if (this.pdfJsLoaded) return;
-    if (this.loadingPromise) {
-      return this.loadingPromise;
-    }
+    if (this.pdfJsLoaded) return this.loadingPromise || Promise.resolve();
+    if (this.loadingPromise) return this.loadingPromise;
     this.loadingPromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      const pdfJsBaseUrl = this.settings.pdfJsWorkerUrl.substring(0, this.settings.pdfJsWorkerUrl.lastIndexOf("/") + 1);
+      script.src = pdfJsBaseUrl + "pdf.min.js";
       script.onload = () => {
         if (window.pdfjsLib) {
           window.pdfjsLib.GlobalWorkerOptions.workerSrc = this.settings.pdfJsWorkerUrl;
           this.pdfJsLoaded = true;
           resolve();
         } else {
-          reject(new Error("PDF.js failed to load"));
+          this.pdfJsLoaded = false;
+          reject(new Error("PDF.js library failed to load onto window.pdfjsLib."));
         }
       };
-      script.onerror = () => reject(new Error("Failed to load PDF.js"));
+      script.onerror = (err) => {
+        this.pdfJsLoaded = false;
+        console.error("Failed to load PDF.js script:", err);
+        reject(new Error(`Failed to load PDF.js script from ${script.src}`));
+      };
       document.head.appendChild(script);
     });
+    try {
+      await this.loadingPromise;
+    } catch (e) {
+      this.loadingPromise = null;
+      throw e;
+    }
     return this.loadingPromise;
   }
   isMobileDevice() {
-    const userAgent = navigator.userAgent;
-    const platform = navigator.platform;
-    const isIOS = /iPad|iPhone|iPod/.test(userAgent) || platform === "MacIntel" && navigator.maxTouchPoints > 1;
-    const isAndroid = /Android/.test(userAgent);
-    const isMobile = /Mobi/.test(userAgent);
-    const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-    const isSmallScreen = window.innerWidth <= 1024;
-    return isIOS || isAndroid || isMobile || isTouchDevice && isSmallScreen;
+    return import_obsidian.Platform.isMobile;
   }
   isValidURL(urlString) {
     try {
@@ -173,17 +211,20 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
       return false;
     }
   }
-  isDomainAllowed(urlString) {
-    if (!this.settings.restrictDomains) {
-      try {
-        const url = new URL(urlString);
-        return url.protocol === "https:";
-      } catch (e) {
-        return false;
-      }
+  isPotentiallyAbsolutePath(pathString) {
+    if (!pathString) return false;
+    if (import_obsidian.Platform.isWin) {
+      return /^[a-zA-Z]:[\\\/]/.test(pathString) || pathString.startsWith("\\\\");
+    } else {
+      return pathString.startsWith("/");
     }
+  }
+  isDomainAllowed(urlString) {
+    if (!this.isValidURL(urlString)) return false;
+    const url = new URL(urlString);
+    if (url.protocol !== "https:") return false;
+    if (!this.settings.restrictDomains) return true;
     try {
-      const url = new URL(urlString);
       const hostname = url.hostname.toLowerCase();
       return this.settings.allowedDomains.some(
         (domain) => hostname === domain || hostname.endsWith("." + domain)
@@ -192,141 +233,121 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
       return false;
     }
   }
-  async fetchPDFData(url) {
+  async fetchExternalPDFData(url) {
+    const directUrl = this.getDirectDownloadURL(url);
+    const response = await (0, import_obsidian.requestUrl)({ url: directUrl, method: "GET", headers: { "Accept": "application/pdf,*/*" } });
+    if (!response.arrayBuffer) throw new Error("No PDF data received from URL");
+    this.checkFileSize(response.arrayBuffer.byteLength, `External PDF from ${url}`);
+    return response.arrayBuffer;
+  }
+  async fetchLocalPDFData(file) {
+    const fileData = await this.app.vault.readBinary(file);
+    this.checkFileSize(fileData.byteLength, `Local vault PDF ${file.path}`);
+    return fileData;
+  }
+  async fetchAbsoluteLocalPDFData(filePath) {
+    if (!import_obsidian.Platform.isDesktop || !this.nodeFs || !this.nodePath) {
+      throw new Error("Absolute path access is only supported on Obsidian desktop and requires Node.js 'fs' and 'path' modules.");
+    }
     try {
-      const directUrl = this.getDirectDownloadURL(url);
-      const response = await (0, import_obsidian.requestUrl)({
-        url: directUrl,
-        method: "GET",
-        headers: {
-          "Accept": "application/pdf,*/*"
-        }
-      });
-      if (!response.arrayBuffer) {
-        throw new Error("No PDF data received");
+      const normalizedPath = this.nodePath.normalize(filePath);
+      if (!this.nodeFs.existsSync(normalizedPath)) {
+        throw new Error(`File not found at absolute path: ${normalizedPath}`);
       }
-      const sizeInMB = response.arrayBuffer.byteLength / (1024 * 1024);
-      if (sizeInMB > this.settings.maxFileSize) {
-        throw new Error(`PDF file too large: ${sizeInMB.toFixed(1)}MB (max: ${this.settings.maxFileSize}MB)`);
+      const stats = this.nodeFs.statSync(normalizedPath);
+      if (!stats.isFile()) {
+        throw new Error(`Path is not a file: ${normalizedPath}`);
       }
-      return response.arrayBuffer;
+      const fileDataBuffer = this.nodeFs.readFileSync(normalizedPath);
+      const arrayBuffer = fileDataBuffer.buffer.slice(fileDataBuffer.byteOffset, fileDataBuffer.byteOffset + fileDataBuffer.byteLength);
+      this.checkFileSize(arrayBuffer.byteLength, `Absolute path PDF ${normalizedPath}`);
+      return arrayBuffer;
     } catch (error) {
-      console.error("Error fetching PDF:", error);
-      throw error;
+      console.error(`Error reading absolute local PDF file ${filePath}:`, error);
+      throw new Error(`Reading file ${filePath}: ${error.message || "Unknown fs error"}`);
+    }
+  }
+  checkFileSize(byteLength, sourceDescription) {
+    const sizeInMB = byteLength / (1024 * 1024);
+    if (sizeInMB > this.settings.maxFileSize) {
+      throw new Error(`PDF file too large: ${sizeInMB.toFixed(1)}MB (max: ${this.settings.maxFileSize}MB). Source: ${sourceDescription}`);
     }
   }
   getDirectDownloadURL(url) {
-    const urlObj = new URL(url);
-    const hostname = urlObj.hostname.toLowerCase();
-    if (hostname.includes("drive.google.com")) {
-      const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-      if (fileIdMatch) {
-        return `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+    try {
+      const urlObj = new URL(url);
+      const hostname = urlObj.hostname.toLowerCase();
+      if (hostname.includes("drive.google.com")) {
+        const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+        if (fileIdMatch) return `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
       }
-    }
-    if (hostname.includes("dropbox.com")) {
-      return url.replace("?dl=0", "?dl=1").replace("www.dropbox.com", "dl.dropboxusercontent.com");
-    }
-    if (hostname.includes("onedrive.live.com") || hostname.includes("1drv.ms")) {
-      return url.replace("?e=", "&download=1&e=");
+      if (hostname.includes("dropbox.com")) {
+        const newUrl = new URL(url);
+        newUrl.hostname = "dl.dropboxusercontent.com";
+        newUrl.searchParams.set("dl", "1");
+        return newUrl.toString();
+      }
+      if (hostname.includes("onedrive.live.com") || hostname.includes("1drv.ms")) {
+        const newUrl = new URL(url);
+        if (url.includes("/embed")) newUrl.pathname = newUrl.pathname.replace("/embed", "/download");
+        newUrl.searchParams.set("download", "1");
+        return newUrl.toString();
+      }
+    } catch (e) {
+      console.warn("Could not parse URL for direct download conversion:", url, e);
     }
     return url;
   }
   parseOptions(lines) {
     const options = {};
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.includes(":")) {
-        const colonIndex = line.indexOf(":");
-        const key = line.substring(0, colonIndex).trim();
-        const value = line.substring(colonIndex + 1).trim();
+    lines.slice(1).forEach((line) => {
+      const trimmedLine = line.trim();
+      const colonIndex = trimmedLine.indexOf(":");
+      if (colonIndex > 0) {
+        const key = trimmedLine.substring(0, colonIndex).trim().toLowerCase();
+        const value = trimmedLine.substring(colonIndex + 1).trim();
         options[key] = value;
       }
-    }
+    });
     return options;
   }
   parseHeight(heightOption) {
     if (!heightOption) return this.settings.defaultHeight;
-    if (/^\d+$/.test(heightOption)) {
-      return heightOption + "px";
-    }
-    if (/^\d+(\.\d+)?(px|vh|vw|em|rem|%)$/i.test(heightOption)) {
-      return heightOption;
-    }
+    if (/^\d+$/.test(heightOption)) return heightOption + "px";
+    if (/^\d+(\.\d+)?(px|vh|vw|em|rem|%)$/i.test(heightOption)) return heightOption;
     return this.settings.defaultHeight;
   }
   createErrorElement(el, message) {
-    el.createEl("div", {
-      text: message,
-      cls: "external-pdf-error"
-    });
+    el.empty();
+    el.createEl("div", { text: message, cls: "external-pdf-error" });
   }
   createLoadingElement(el) {
-    const loadingContainer = el.createEl("div", {
-      cls: "external-pdf-loading"
-    });
-    const spinner = loadingContainer.createEl("div", {
-      cls: "external-pdf-spinner"
-    });
-    const loadingText = loadingContainer.createEl("div", {
-      text: "Loading PDF...",
-      cls: "external-pdf-loading-text"
-    });
+    el.empty();
+    const loadingContainer = el.createEl("div", { cls: "external-pdf-loading" });
+    loadingContainer.createEl("div", { cls: "external-pdf-spinner" });
+    loadingContainer.createEl("div", { text: "Loading PDF...", cls: "external-pdf-loading-text" });
     return loadingContainer;
   }
   async createPDFJSViewer(container, pdfData, options) {
     try {
       const pdf = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
-      const viewerContainer = container.createEl("div", {
-        cls: "external-pdf-viewer"
-      });
-      const controls = viewerContainer.createEl("div", {
-        cls: "external-pdf-controls"
-      });
-      const pageControls = controls.createEl("div", {
-        cls: "external-pdf-page-controls"
-      });
-      const prevBtn = pageControls.createEl("button", {
-        text: "\u2039",
-        cls: "external-pdf-nav-btn external-pdf-prev-btn"
-      });
-      const pageDisplay = pageControls.createEl("span", {
-        cls: "external-pdf-page-display"
-      });
-      const nextBtn = pageControls.createEl("button", {
-        text: "\u203A",
-        cls: "external-pdf-nav-btn external-pdf-next-btn"
-      });
-      const zoomControls = controls.createEl("div", {
-        cls: "external-pdf-zoom-controls"
-      });
-      const zoomOutBtn = zoomControls.createEl("button", {
-        text: "\u2212",
-        cls: "external-pdf-zoom-btn"
-      });
-      const zoomDisplay = zoomControls.createEl("span", {
-        cls: "external-pdf-zoom-display"
-      });
-      const zoomInBtn = zoomControls.createEl("button", {
-        text: "+",
-        cls: "external-pdf-zoom-btn"
-      });
-      const fitWidthBtn = zoomControls.createEl("button", {
-        text: "Fit",
-        cls: "external-pdf-fit-btn"
-      });
-      const canvasContainer = viewerContainer.createEl("div", {
-        cls: "external-pdf-canvas-container"
-      });
+      const viewerContainer = container.createEl("div", { cls: "external-pdf-viewer" });
+      const controls = viewerContainer.createEl("div", { cls: "external-pdf-controls" });
+      const pageControls = controls.createEl("div", { cls: "external-pdf-page-controls" });
+      const prevBtn = pageControls.createEl("button", { text: "\u2039", title: "Previous Page (ArrowLeft, PageUp)", cls: "external-pdf-nav-btn external-pdf-prev-btn" });
+      const pageDisplay = pageControls.createEl("span", { cls: "external-pdf-page-display" });
+      const nextBtn = pageControls.createEl("button", { text: "\u203A", title: "Next Page (ArrowRight, PageDown, Space)", cls: "external-pdf-nav-btn external-pdf-next-btn" });
+      const zoomControls = controls.createEl("div", { cls: "external-pdf-zoom-controls" });
+      const zoomOutBtn = zoomControls.createEl("button", { text: "\u2212", title: "Zoom Out (-)", cls: "external-pdf-zoom-btn" });
+      const zoomDisplay = zoomControls.createEl("span", { cls: "external-pdf-zoom-display" });
+      const zoomInBtn = zoomControls.createEl("button", { text: "+", title: "Zoom In (+, =)", cls: "external-pdf-zoom-btn" });
+      const fitWidthBtn = zoomControls.createEl("button", { text: "Fit", title: "Fit to Width (0)", cls: "external-pdf-fit-btn" });
+      const canvasContainer = viewerContainer.createEl("div", { cls: "external-pdf-canvas-container" });
       const heightValue = this.parseHeight(options.height);
       canvasContainer.style.maxHeight = heightValue;
-      const canvas = canvasContainer.createEl("canvas", {
-        cls: "external-pdf-canvas"
-      });
+      const canvas = canvasContainer.createEl("canvas", { cls: "external-pdf-canvas" });
       const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        throw new Error("Failed to get canvas context");
-      }
+      if (!ctx) throw new Error("Failed to get canvas context");
       let currentPage = 1;
       let scale = this.isMobileDevice() ? 1 : this.settings.defaultScale;
       const minScale = 0.25;
@@ -335,8 +356,8 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
       const calculateFitToWidthScale = async (pageNum) => {
         const page = await pdf.getPage(pageNum);
         const viewport = page.getViewport({ scale: 1 });
-        const containerWidth = canvasContainer.clientWidth - 32;
-        return containerWidth / viewport.width;
+        const containerWidth = canvasContainer.clientWidth > 0 ? canvasContainer.clientWidth - (this.isMobileDevice() ? 16 : 32) : 600 - 32;
+        return Math.max(minScale, Math.min(maxScale, containerWidth / viewport.width));
       };
       const updatePageDisplay = () => {
         pageDisplay.textContent = `${currentPage} / ${pdf.numPages}`;
@@ -356,6 +377,7 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
           let renderScale = scale;
           if (fitToWidth) {
             renderScale = await calculateFitToWidthScale(pageNum);
+            if (scale !== renderScale) scale = renderScale;
           }
           const viewport = page.getViewport({ scale: renderScale });
           const outputScale = window.devicePixelRatio || 1;
@@ -363,18 +385,20 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
           canvas.height = Math.floor(viewport.height * outputScale);
           canvas.style.width = `${Math.floor(viewport.width)}px`;
           canvas.style.height = `${Math.floor(viewport.height)}px`;
+          ctx.save();
           ctx.scale(outputScale, outputScale);
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, viewport.width, viewport.height);
-          const renderContext = {
-            canvasContext: ctx,
-            viewport
-          };
-          await page.render(renderContext).promise;
-        } catch (error) {
-          console.error("Error rendering page:", error);
-          this.createErrorElement(canvasContainer, `Error rendering page ${pageNum}: ${error.message}`);
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          ctx.restore();
+        } catch (renderError) {
+          console.error(`Error rendering page ${pageNum}:`, renderError);
+          ctx.save();
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = "red";
+          ctx.font = "16px sans-serif";
+          ctx.fillText(`Error rendering page: ${renderError.message}`, 10, 30);
+          ctx.restore();
         }
       };
       prevBtn.addEventListener("click", async () => {
@@ -418,15 +442,14 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
         updateZoomDisplay();
         await renderPage(currentPage);
       });
-      const handleKeydown = async (e) => {
-        if (e.target !== viewerContainer && !viewerContainer.contains(e.target)) {
-          return;
-        }
+      viewerContainer.tabIndex = 0;
+      viewerContainer.addEventListener("keydown", async (e) => {
+        if (e.target !== viewerContainer && !viewerContainer.contains(e.target)) return;
+        let preventDefault = true;
         switch (e.key) {
           case "ArrowLeft":
           case "ArrowUp":
           case "PageUp":
-            e.preventDefault();
             if (currentPage > 1) {
               currentPage--;
               updatePageDisplay();
@@ -437,7 +460,6 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
           case "ArrowDown":
           case "PageDown":
           case " ":
-            e.preventDefault();
             if (currentPage < pdf.numPages) {
               currentPage++;
               updatePageDisplay();
@@ -445,7 +467,6 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
             }
             break;
           case "Home":
-            e.preventDefault();
             if (currentPage !== 1) {
               currentPage = 1;
               updatePageDisplay();
@@ -453,7 +474,6 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
             }
             break;
           case "End":
-            e.preventDefault();
             if (currentPage !== pdf.numPages) {
               currentPage = pdf.numPages;
               updatePageDisplay();
@@ -462,7 +482,6 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
             break;
           case "+":
           case "=":
-            e.preventDefault();
             if (fitToWidth) {
               fitToWidth = false;
               scale = await calculateFitToWidthScale(currentPage);
@@ -474,7 +493,6 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
             }
             break;
           case "-":
-            e.preventDefault();
             if (fitToWidth) {
               fitToWidth = false;
               scale = await calculateFitToWidthScale(currentPage);
@@ -486,83 +504,64 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
             }
             break;
           case "0":
-            e.preventDefault();
             fitToWidth = true;
             updateZoomDisplay();
             await renderPage(currentPage);
             break;
+          default:
+            preventDefault = false;
+            break;
         }
-      };
-      viewerContainer.tabIndex = 0;
-      viewerContainer.addEventListener("keydown", handleKeydown);
+        if (preventDefault) e.preventDefault();
+      });
       if (this.isMobileDevice()) {
-        let startX = 0;
-        let startY = 0;
-        let startScale = scale;
-        let initialDistance = 0;
-        let isPinching = false;
-        const getTouchDistance = (touches) => {
-          if (touches.length < 2) return 0;
-          const dx = touches[0].clientX - touches[1].clientX;
-          const dy = touches[0].clientY - touches[1].clientY;
-          return Math.sqrt(dx * dx + dy * dy);
-        };
+        let startX = 0, startY = 0, startDist = 0, currentScale = scale, isPinching = false;
+        const getTouchDistance = (touches) => Math.hypot(touches[0].pageX - touches[1].pageX, touches[0].pageY - touches[1].pageY);
         canvasContainer.addEventListener("touchstart", async (e) => {
           if (e.touches.length === 1) {
-            startX = e.touches[0].clientX;
-            startY = e.touches[0].clientY;
+            startX = e.touches[0].pageX;
+            startY = e.touches[0].pageY;
             isPinching = false;
           } else if (e.touches.length === 2) {
             e.preventDefault();
-            initialDistance = getTouchDistance(e.touches);
-            startScale = fitToWidth ? await calculateFitToWidthScale(currentPage) : scale;
+            startDist = getTouchDistance(e.touches);
+            currentScale = fitToWidth ? await calculateFitToWidthScale(currentPage) : scale;
             isPinching = true;
             fitToWidth = false;
           }
-        });
+        }, { passive: false });
         canvasContainer.addEventListener("touchmove", async (e) => {
-          if (e.touches.length === 2 && isPinching) {
+          if (isPinching && e.touches.length === 2) {
             e.preventDefault();
-            const currentDistance = getTouchDistance(e.touches);
-            if (initialDistance > 0) {
-              const scaleChange = currentDistance / initialDistance;
-              const newScale = Math.max(minScale, Math.min(maxScale, startScale * scaleChange));
-              if (Math.abs(newScale - scale) > 0.05) {
+            const dist = getTouchDistance(e.touches);
+            if (startDist > 0) {
+              const newScale = Math.max(minScale, Math.min(maxScale, currentScale * (dist / startDist)));
+              if (Math.abs(newScale - scale) > 0.02) {
                 scale = newScale;
                 updateZoomDisplay();
                 await renderPage(currentPage);
               }
             }
           }
-        });
+        }, { passive: false });
         canvasContainer.addEventListener("touchend", async (e) => {
           if (e.changedTouches.length === 1 && e.touches.length === 0 && !isPinching) {
-            const endX = e.changedTouches[0].clientX;
-            const endY = e.changedTouches[0].clientY;
+            const endX = e.changedTouches[0].pageX;
             const deltaX = endX - startX;
-            const deltaY = endY - startY;
-            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            if (distance > 50) {
-              if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                if (deltaX > 0 && currentPage > 1) {
-                  currentPage--;
-                  updatePageDisplay();
-                  await renderPage(currentPage);
-                } else if (deltaX < 0 && currentPage < pdf.numPages) {
-                  currentPage++;
-                  updatePageDisplay();
-                  await renderPage(currentPage);
-                }
+            if (Math.abs(deltaX) > 50) {
+              if (deltaX > 0 && currentPage > 1) {
+                currentPage--;
+                updatePageDisplay();
+                await renderPage(currentPage);
+              } else if (deltaX < 0 && currentPage < pdf.numPages) {
+                currentPage++;
+                updatePageDisplay();
+                await renderPage(currentPage);
               }
             }
           }
-          isPinching = false;
+          if (isPinching && e.touches.length < 2) isPinching = false;
         });
-        canvasContainer.addEventListener("touchstart", (e) => {
-          if (e.touches.length > 1) {
-            e.preventDefault();
-          }
-        }, { passive: false });
       }
       updatePageDisplay();
       updateZoomDisplay();
@@ -572,454 +571,94 @@ var ExternalPDFPlugin = class extends import_obsidian.Plugin {
       }
       await renderPage(currentPage);
       if (this.isMobileDevice()) {
-        const helpText = viewerContainer.createEl("div", {
-          cls: "external-pdf-mobile-help"
-        });
-        helpText.textContent = 'Swipe left/right for pages \u2022 Pinch to zoom \u2022 Tap "Fit" to fit width';
+        const helpText = viewerContainer.createEl("div", { cls: "external-pdf-mobile-help" });
+        helpText.textContent = 'Swipe for pages \u2022 Pinch to zoom \u2022 Tap "Fit"';
       }
     } catch (error) {
-      console.error("Error creating PDF.js viewer:", error);
-      throw error;
+      console.error("Error in createPDFJSViewer:", error);
+      this.createErrorElement(container, `Error displaying PDF: ${error.message || "Unknown PDF viewer error"}`);
     }
   }
   async renderExternalPDF(source, el, ctx) {
+    var _a, _b;
     const lines = source.trim().split("\n");
-    const url = lines[0].trim();
-    if (!url) {
-      this.createErrorElement(el, "Error: No PDF URL provided");
-      return;
-    }
-    if (!this.isValidURL(url)) {
-      this.createErrorElement(el, "Error: Invalid URL provided");
-      return;
-    }
-    if (!this.isDomainAllowed(url)) {
-      const errorMsg = this.settings.restrictDomains ? `Error: Domain not allowed. Allowed domains: ${this.settings.allowedDomains.join(", ")}` : "Error: Only HTTPS URLs are allowed for security reasons";
-      this.createErrorElement(el, errorMsg);
-      return;
-    }
+    const sourceInput = (_a = lines[0]) == null ? void 0 : _a.trim();
     const options = this.parseOptions(lines);
     const isMobile = this.isMobileDevice();
     const container = el.createEl("div", {
       cls: "external-pdf-container" + (isMobile ? " external-pdf-mobile" : "")
     });
     if (options.title) {
-      container.createEl("h3", {
-        text: options.title,
-        cls: "external-pdf-title"
-      });
+      container.createEl("h3", { text: options.title, cls: "external-pdf-title" });
+    }
+    let pdfDataSource;
+    if (!sourceInput) {
+      pdfDataSource = { type: "error", message: "No PDF source (URL or local path) provided." };
+    } else {
+      const abstractFile = this.app.vault.getAbstractFileByPath(sourceInput);
+      if (abstractFile instanceof import_obsidian.TFile && ((_b = abstractFile.extension) == null ? void 0 : _b.toLowerCase()) === "pdf") {
+        pdfDataSource = { type: "vaultLocal", file: abstractFile };
+      } else if (this.isValidURL(sourceInput)) {
+        if (!this.isDomainAllowed(sourceInput)) {
+          const errorMsgText = this.settings.restrictDomains ? `External domain not allowed. Allowed: ${this.settings.allowedDomains.join(", ")} (or disable domain restriction).` : "Only HTTPS URLs are allowed for external PDFs for security reasons.";
+          pdfDataSource = { type: "error", message: errorMsgText };
+        } else {
+          pdfDataSource = { type: "url", url: sourceInput };
+        }
+      } else if (this.isPotentiallyAbsolutePath(sourceInput)) {
+        if (!this.settings.allowAbsolutePaths) {
+          pdfDataSource = { type: "error", message: "Absolute file paths are disabled. Enable them in plugin settings (Desktop Only)." };
+        } else if (!import_obsidian.Platform.isDesktop) {
+          pdfDataSource = { type: "error", message: "Absolute file paths are only supported on Obsidian desktop." };
+        } else {
+          pdfDataSource = { type: "absoluteLocal", path: sourceInput };
+        }
+      } else {
+        pdfDataSource = { type: "error", message: `Invalid source: "${sourceInput}". Not a valid URL, vault file path, or recognizable absolute file path.` };
+      }
+    }
+    if (pdfDataSource.type === "error") {
+      this.createErrorElement(container, pdfDataSource.message);
+      return;
     }
     const loadingEl = this.createLoadingElement(container);
     try {
       await this.loadPDFJS();
-      const pdfData = await this.fetchPDFData(url);
-      loadingEl.remove();
+      let pdfData;
+      switch (pdfDataSource.type) {
+        case "vaultLocal":
+          pdfData = await this.fetchLocalPDFData(pdfDataSource.file);
+          break;
+        case "url":
+          pdfData = await this.fetchExternalPDFData(pdfDataSource.url);
+          break;
+        case "absoluteLocal":
+          pdfData = await this.fetchAbsoluteLocalPDFData(pdfDataSource.path);
+          break;
+      }
+      if (loadingEl.parentNode) loadingEl.remove();
       await this.createPDFJSViewer(container, pdfData, options);
     } catch (error) {
-      console.error("Error loading PDF:", error);
-      loadingEl.remove();
-      const errorMsg = container.createEl("div", {
-        cls: "external-pdf-error"
-      });
-      errorMsg.textContent = `Failed to load PDF: ${error.message}`;
-      const fallbackLink = container.createEl("p", {
-        cls: "external-pdf-fallback"
-      });
-      fallbackLink.innerHTML = `<a href="${url}" target="_blank" rel="noopener noreferrer">Open PDF in browser</a>`;
+      console.error("Error loading or rendering PDF:", error);
+      if (loadingEl.parentNode) loadingEl.remove();
+      this.createErrorElement(container, `Failed to load PDF: ${error.message || "Unknown error"}`);
+      if (pdfDataSource.type === "url") {
+        const fallbackLink = container.createEl("p", { cls: "external-pdf-fallback" });
+        fallbackLink.innerHTML = `Try opening: <a href="${pdfDataSource.url}" target="_blank" rel="noopener noreferrer">${pdfDataSource.url}</a>`;
+      } else if (pdfDataSource.type === "vaultLocal") {
+        const localFileNote = container.createEl("p", { cls: "external-pdf-fallback" });
+        localFileNote.innerHTML = `Problem with vault file: <code>${pdfDataSource.file.path}</code>.`;
+      } else if (pdfDataSource.type === "absoluteLocal") {
+        const absFileNote = container.createEl("p", { cls: "external-pdf-fallback" });
+        absFileNote.innerHTML = `Problem with absolute path file: <code>${pdfDataSource.path}</code>.`;
+      }
     }
-    this.addStyles();
-  }
-  addStyles() {
-    if (this.stylesAdded || document.querySelector("#external-pdf-styles")) return;
-    const style = document.createElement("style");
-    style.id = "external-pdf-styles";
-    style.textContent = `
-            .external-pdf-container {
-                margin: 1em 0;
-                padding: 0.5em;
-                border: 1px solid var(--background-modifier-border);
-                border-radius: 8px;
-                background: var(--background-primary);
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            
-            .external-pdf-title {
-                margin: 0 0 0.5em 0;
-                font-size: 1.1em;
-                color: var(--text-normal);
-                font-weight: 600;
-            }
-            
-            .external-pdf-loading {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                padding: 2em;
-                text-align: center;
-            }
-            
-            .external-pdf-spinner {
-                width: 32px;
-                height: 32px;
-                border: 3px solid var(--background-modifier-border);
-                border-top: 3px solid var(--text-accent);
-                border-radius: 50%;
-                animation: spin 1s linear infinite;
-                margin-bottom: 1em;
-            }
-            
-            .external-pdf-loading-text {
-                color: var(--text-muted);
-                font-size: 0.9em;
-            }
-            
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-            
-            .external-pdf-viewer {
-                border: 1px solid var(--background-modifier-border);
-                border-radius: 8px;
-                background: var(--background-secondary);
-                padding: 0.5em;
-                outline: none;
-            }
-            
-            .external-pdf-controls {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                flex-wrap: wrap;
-                gap: 0.5em;
-                padding: 0.5em;
-                background: var(--background-primary);
-                border-radius: 6px;
-                margin-bottom: 0.5em;
-                border: 1px solid var(--background-modifier-border);
-            }
-            
-            .external-pdf-page-controls {
-                display: flex;
-                align-items: center;
-                gap: 0.5em;
-            }
-            
-            .external-pdf-nav-btn {
-                background: var(--interactive-normal);
-                color: var(--text-normal);
-                border: 1px solid var(--background-modifier-border);
-                border-radius: 4px;
-                padding: 0.5em 0.75em;
-                cursor: pointer;
-                font-size: 1.1em;
-                font-weight: bold;
-                transition: all 0.2s ease;
-                min-width: 36px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            
-            .external-pdf-nav-btn:hover:not(:disabled) {
-                background: var(--interactive-hover);
-                border-color: var(--background-modifier-border-hover);
-            }
-            
-            .external-pdf-nav-btn:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-            
-            .external-pdf-page-display {
-                font-size: 0.9em;
-                color: var(--text-normal);
-                font-weight: 500;
-                padding: 0 0.75em;
-                white-space: nowrap;
-            }
-            
-            .external-pdf-zoom-controls {
-                display: flex;
-                align-items: center;
-                gap: 0.25em;
-            }
-            
-            .external-pdf-zoom-btn, .external-pdf-fit-btn {
-                background: var(--interactive-normal);
-                color: var(--text-normal);
-                border: 1px solid var(--background-modifier-border);
-                border-radius: 4px;
-                cursor: pointer;
-                font-size: 1em;
-                font-weight: bold;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                transition: all 0.2s ease;
-            }
-            
-            .external-pdf-zoom-btn {
-                width: 32px;
-                height: 32px;
-            }
-            
-            .external-pdf-fit-btn {
-                padding: 0.5em 0.75em;
-                font-size: 0.8em;
-            }
-            
-            .external-pdf-fit-btn.active {
-                background: var(--text-accent);
-                color: var(--text-on-accent);
-                border-color: var(--text-accent);
-            }
-            
-            .external-pdf-zoom-btn:hover:not(:disabled),
-            .external-pdf-fit-btn:hover:not(:disabled) {
-                background: var(--interactive-hover);
-                border-color: var(--background-modifier-border-hover);
-            }
-            
-            .external-pdf-fit-btn.active:hover {
-                background: var(--text-accent-hover);
-                border-color: var(--text-accent-hover);
-            }
-            
-            .external-pdf-zoom-btn:disabled,
-            .external-pdf-fit-btn:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-            
-            .external-pdf-zoom-display {
-                font-size: 0.85em;
-                color: var(--text-normal);
-                min-width: 50px;
-                text-align: center;
-                font-weight: 500;
-            }
-            
-            .external-pdf-canvas-container {
-                text-align: center;
-                overflow: auto;
-                max-height: 70vh; /* Default fallback */
-                border: 1px solid var(--background-modifier-border);
-                border-radius: 6px;
-                background: #f8f8f8;
-                padding: 1em;
-                scroll-behavior: smooth;
-            }
-            
-            .external-pdf-canvas {
-                max-width: 100%;
-                height: auto;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                border-radius: 4px;
-                display: block;
-                margin: 0 auto;
-            }
-            
-            .external-pdf-mobile-help {
-                text-align: center;
-                font-size: 0.8em;
-                color: var(--text-muted);
-                padding: 0.5em;
-                margin-top: 0.5em;
-                background: var(--background-primary);
-                border-radius: 6px;
-                border: 1px solid var(--background-modifier-border);
-            }
-            
-            .external-pdf-error {
-                color: var(--text-error);
-                background: var(--background-primary-alt);
-                padding: 1em;
-                border-radius: 6px;
-                border: 1px solid var(--text-error);
-                margin: 0.5em 0;
-                text-align: center;
-            }
-            
-            .external-pdf-fallback {
-                text-align: center;
-                margin-top: 0.5em;
-            }
-            
-            .external-pdf-fallback a {
-                color: var(--text-accent);
-                text-decoration: none;
-                font-weight: 500;
-            }
-            
-            .external-pdf-fallback a:hover {
-                text-decoration: underline;
-            }
-            
-            /* Mobile-specific styles */
-            .external-pdf-mobile .external-pdf-controls {
-                flex-direction: column;
-                gap: 0.75em;
-            }
-            
-            .external-pdf-mobile .external-pdf-page-controls {
-                order: 1;
-                justify-content: center;
-            }
-            
-            .external-pdf-mobile .external-pdf-zoom-controls {
-                order: 2;
-                justify-content: center;
-            }
-            
-            .external-pdf-mobile .external-pdf-nav-btn {
-                min-width: 44px;
-                height: 44px;
-                font-size: 1.2em;
-            }
-            
-            .external-pdf-mobile .external-pdf-zoom-btn {
-                width: 44px;
-                height: 44px;
-                font-size: 1.1em;
-            }
-            
-            .external-pdf-mobile .external-pdf-fit-btn {
-                padding: 0.75em 1em;
-                height: 44px;
-                font-size: 0.9em;
-            }
-            
-            .external-pdf-mobile .external-pdf-canvas-container {
-                max-height: 60vh;
-                padding: 0.5em;
-            }
-            
-            .external-pdf-mobile .external-pdf-page-display {
-                font-size: 1em;
-                padding: 0 1em;
-            }
-            
-            .external-pdf-mobile .external-pdf-zoom-display {
-                font-size: 0.9em;
-                min-width: 60px;
-            }
-            
-            /* Dark mode adjustments */
-            .theme-dark .external-pdf-canvas-container {
-                background: #2a2a2a;
-            }
-            
-            /* Responsive breakpoints */
-            @media (max-width: 768px) {
-                .external-pdf-controls {
-                    flex-direction: column;
-                    gap: 0.75em;
-                }
-                
-                .external-pdf-nav-btn {
-                    min-width: 40px;
-                    height: 40px;
-                }
-                
-                .external-pdf-zoom-btn {
-                    width: 40px;
-                    height: 40px;
-                }
-                
-                .external-pdf-canvas-container {
-                    max-height: 50vh;
-                }
-            }
-            
-            /* Focus styles for accessibility */
-            .external-pdf-viewer:focus {
-                box-shadow: 0 0 0 2px var(--text-accent);
-            }
-            
-            .external-pdf-nav-btn:focus,
-            .external-pdf-zoom-btn:focus,
-            .external-pdf-fit-btn:focus {
-                outline: 2px solid var(--text-accent);
-                outline-offset: 2px;
-            }
-            
-            /* Smooth transitions */
-            .external-pdf-canvas {
-                transition: transform 0.2s ease;
-            }
-            
-            /* Loading animation refinements */
-            @media (prefers-reduced-motion: reduce) {
-                .external-pdf-spinner {
-                    animation: none;
-                    border: 3px solid var(--text-accent);
-                }
-                
-                .external-pdf-canvas {
-                    transition: none;
-                }
-            }
-
-            /* Settings tab styles */
-            .external-pdf-info {
-                background: var(--background-secondary);
-                padding: 1em;
-                border-radius: 8px;
-                margin-bottom: 1em;
-                border: 1px solid var(--background-modifier-border);
-            }
-            
-            .external-pdf-info h3 {
-                margin-top: 1em;
-                margin-bottom: 0.5em;
-                color: var(--text-accent);
-            }
-            
-            .external-pdf-info ul {
-                margin: 0.5em 0;
-                padding-left: 1.5em;
-            }
-            
-            .external-pdf-info li {
-                margin: 0.25em 0;
-            }
-            
-            .external-pdf-info code {
-                background: var(--background-primary-alt);
-                padding: 0.2em 0.4em;
-                border-radius: 4px;
-                font-size: 0.9em;
-            }
-            
-            .external-pdf-info pre {
-                background: var(--background-primary-alt);
-                padding: 1em;
-                border-radius: 6px;
-                margin: 0.5em 0;
-                overflow-x: auto;
-            }
-            
-            .external-pdf-info pre code {
-                background: none;
-                padding: 0;
-            }
-
-        `;
-    document.head.appendChild(style);
-    this.stylesAdded = true;
   }
   onunload() {
-    if (this.pdfJsLoaded && window.pdfjsLib) {
-    }
-    const existingStyle = document.querySelector("#external-pdf-styles");
-    if (existingStyle) {
-      existingStyle.remove();
-    }
-    this.stylesAdded = false;
     this.pdfJsLoaded = false;
     this.loadingPromise = null;
+    this.nodeFs = null;
+    this.nodePath = null;
     console.log("External PDF Plugin unloaded");
   }
 };
