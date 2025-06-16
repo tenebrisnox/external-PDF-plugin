@@ -1,4 +1,4 @@
-/* Save this content as styles.css in your plugin's root directory. */
+/* 0.0.5 - Save this content as styles.css in your plugin's root directory. */
 .external-pdf-warning {
     color: var(--text-warning);
     font-size: 0.9em;
@@ -153,8 +153,8 @@
     flex-grow: 1;
     text-align: center;
     overflow: auto;
-    /* max-height is set dynamically by JS, a fallback can be here if desired */
-    /* max-height: 70vh; */
+    /* [CHANGED] max-height is now set via a CSS variable in JS for theming. */
+    max-height: var(--pdf-viewer-max-height, 600px);
     border: 1px solid var(--background-modifier-border);
     border-radius: 6px;
     background: #f0f0f0; /* Light theme canvas background */
@@ -169,7 +169,8 @@
 }
 .external-pdf-canvas {
     max-width: 100%;
-    height: auto; /* height is set dynamically by JS */
+    /* [CHANGED] Comment updated to reflect that height is handled by aspect ratio. */
+    height: auto; /* Automatically adjusts height to maintain aspect ratio. */
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     border-radius: 4px;
     display: block;
@@ -249,8 +250,6 @@
     font-size: 0.9em;
 }
 .external-pdf-mobile .external-pdf-canvas-container {
-    /* max-height is set dynamically by JS, a fallback can be here for mobile if desired */
-    /* max-height: 60vh; */
     padding: 0.5em;
 }
 .external-pdf-mobile .external-pdf-page-display {
@@ -277,8 +276,6 @@
         height: 40px;
     }
     .external-pdf-canvas-container:not(.external-pdf-mobile .external-pdf-canvas-container) {
-        /* max-height is set dynamically by JS, a fallback can be here for small screens if desired */
-        /* max-height: 50vh; */
     }
 }
 

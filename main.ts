@@ -44,59 +44,89 @@ class ExternalPDFSettingTab extends PluginSettingTab {
         containerEl.createEl('h2', { text: 'External PDF Plugin' });
 
         const infoDiv = containerEl.createEl('div', { cls: 'external-pdf-info' });
-        infoDiv.innerHTML = `
-            <p><strong>Embed external PDFs, local vault PDFs, and local absolute path PDFs (desktop only) directly in your notes with full viewer controls.</strong></p>
+        
+        // --- Start of DOM API replacement for innerHTML ---
+        const p1 = infoDiv.createEl('p');
+        p1.createEl('strong', { text: 'Embed external PDFs, local vault PDFs, and local absolute path PDFs (desktop only) directly in your notes with full viewer controls.' });
 
-            <h3>📖 How to Use</h3>
-            <p>Add a code block with <code>external-pdf</code> language and provide the source:</p>
+        infoDiv.createEl('h3', { text: '📖 How to Use' });
 
-            <p><strong>For external PDFs (HTTPS URLs):</strong></p>
-            <pre><code>\`\`\`external-pdf
+        const p2 = infoDiv.createEl('p');
+        p2.appendText('Add a code block with ');
+        p2.createEl('code', { text: 'external-pdf' });
+        p2.appendText(' language and provide the source:');
+
+        const p3 = infoDiv.createEl('p');
+        p3.createEl('strong', { text: 'For external PDFs (HTTPS URLs):' });
+        
+        const pre1 = infoDiv.createEl('pre');
+        pre1.createEl('code', { text: `\`\`\`external-pdf
 https://example.com/document.pdf
 title: My Online Document
 height: 500px
-\`\`\`</code></pre>
+\`\`\`` });
 
-            <p><strong>For local PDFs in your vault (relative path from vault root):</strong></p>
-            <pre><code>\`\`\`external-pdf
+        const p4 = infoDiv.createEl('p');
+        p4.createEl('strong', { text: 'For local PDFs in your vault (relative path from vault root):' });
+
+        const pre2 = infoDiv.createEl('pre');
+        pre2.createEl('code', { text: `\`\`\`external-pdf
 Attachments/MyLocalDocument.pdf
 title: Vault PDF
 height: 400px
-\`\`\`</code></pre>
+\`\`\`` });
 
-            <p><strong>For local PDFs via absolute path (Desktop Only, requires enabling below):</strong></p>
-            <pre><code>\`\`\`external-pdf
-${Platform.isWin ? 'C:/Users/YourName/Documents/AbsoluteDoc.pdf' : '/Users/YourName/Documents/AbsoluteDoc.pdf'}
+        const p5 = infoDiv.createEl('p');
+        p5.createEl('strong', { text: 'For local PDFs via absolute path (Desktop Only, requires enabling below):' });
+
+        const pre3 = infoDiv.createEl('pre');
+        const absolutePathExample = Platform.isWin ? 'C:/Users/YourName/Documents/AbsoluteDoc.pdf' : '/Users/YourName/Documents/AbsoluteDoc.pdf';
+        pre3.createEl('code', { text: `\`\`\`external-pdf
+${absolutePathExample}
 title: Absolute Path PDF
-\`\`\`</code></pre>
+\`\`\`` });
 
-            <h3>🔧 Supported Options</h3>
-            <ul>
-                <li><strong>title:</strong> Display name for the PDF</li>
-                <li><strong>height:</strong> Viewer height (e.g., 600px, 80vh, 400)</li>
-            </ul>
+        infoDiv.createEl('h3', { text: '🔧 Supported Options' });
 
-            <h3>🌐 Supported Sources</h3>
-            <ul>
-                <li>Local PDF files from your Obsidian vault (e.g., <code>Attachments/MyReport.pdf</code>)</li>
-                <li>Local PDF files via absolute path (e.g., <code>${Platform.isWin ? 'D:\\\\Docs\\\\report.pdf' : '/mnt/data/report.pdf'}</code>) - <strong>Desktop Only, requires enabling in settings.</strong></li>
-                <li>Google Drive (sharing links)</li>
-                <li>Dropbox (sharing links)</li>
-                <li>OneDrive (sharing links)</li>
-                <li>GitHub (raw PDF files)</li>
-                <li>Any direct HTTPS PDF URL</li>
-            </ul>
+        const ul1 = infoDiv.createEl('ul');
+        const li1 = ul1.createEl('li');
+        li1.createEl('strong', { text: 'title:' });
+        li1.appendText(' Display name for the PDF');
+        const li2 = ul1.createEl('li');
+        li2.createEl('strong', { text: 'height:' });
+        li2.appendText(' Viewer height (e.g., 600px, 80vh, 400)');
 
-            <h3>📱 Features</h3>
-            <ul>
-                <li>Mobile-optimized with touch gestures (for URLs and vault files)</li>
-                <li>Keyboard navigation (arrows, space, +/- zoom)</li>
-                <li>Page controls and zoom options</li>
-                <li>Fit-to-width mode</li>
-                <li>Pinch-to-zoom on mobile</li>
-                <li>Swipe gestures for page navigation</li>
-            </ul>
-        `;
+        infoDiv.createEl('h3', { text: '🌐 Supported Sources' });
+
+        const ul2 = infoDiv.createEl('ul');
+        let li = ul2.createEl('li');
+        li.appendText('Local PDF files from your Obsidian vault (e.g., ');
+        li.createEl('code', { text: 'Attachments/MyReport.pdf' });
+        li.appendText(')');
+
+        li = ul2.createEl('li');
+        const absolutePathExample2 = Platform.isWin ? 'D:\\\\Docs\\\\report.pdf' : '/mnt/data/report.pdf';
+        li.appendText('Local PDF files via absolute path (e.g., ');
+        li.createEl('code', { text: absolutePathExample2 });
+        li.appendText(') - ');
+        li.createEl('strong', { text: 'Desktop Only, requires enabling in settings.' });
+
+        ul2.createEl('li', { text: 'Google Drive (sharing links)' });
+        ul2.createEl('li', { text: 'Dropbox (sharing links)' });
+        ul2.createEl('li', { text: 'OneDrive (sharing links)' });
+        ul2.createEl('li', { text: 'GitHub (raw PDF files)' });
+        ul2.createEl('li', { text: 'Any direct HTTPS PDF URL' });
+
+        infoDiv.createEl('h3', { text: '📱 Features' });
+
+        const ul3 = infoDiv.createEl('ul');
+        ul3.createEl('li', { text: 'Mobile-optimized with touch gestures (for URLs and vault files)' });
+        ul3.createEl('li', { text: 'Keyboard navigation (arrows, space, +/- zoom)' });
+        ul3.createEl('li', { text: 'Page controls and zoom options' });
+        ul3.createEl('li', { text: 'Fit-to-width mode' });
+        ul3.createEl('li', { text: 'Pinch-to-zoom on mobile' });
+        ul3.createEl('li', { text: 'Swipe gestures for page navigation' });
+        // --- End of DOM API replacement ---
 
         containerEl.createEl('h3', { text: 'Settings' });
 
@@ -416,7 +446,8 @@ export default class ExternalPDFPlugin extends Plugin {
 
             const canvasContainer = viewerContainer.createEl('div', { cls: 'external-pdf-canvas-container' });
             const heightValue = this.parseHeight(options.height);
-            canvasContainer.style.maxHeight = heightValue; // Dynamic style based on options
+            // [CHANGED] Use CSS variable for dynamic height for better theming.
+            canvasContainer.style.setProperty('--pdf-viewer-max-height', heightValue);
 
             const canvas = canvasContainer.createEl('canvas', { cls: 'external-pdf-canvas' });
             const ctx = canvas.getContext('2d');
@@ -450,8 +481,10 @@ export default class ExternalPDFPlugin extends Plugin {
                     const outputScale = window.devicePixelRatio || 1;
                     canvas.width = Math.floor(viewport.width * outputScale);
                     canvas.height = Math.floor(viewport.height * outputScale);
-                    canvas.style.width = `${Math.floor(viewport.width)}px`; // Dynamic style
-                    canvas.style.height = `${Math.floor(viewport.height)}px`; // Dynamic style
+                    
+                    // [REMOVED] Inline styles for canvas width and height.
+                    // CSS `height: auto` will handle aspect ratio correctly.
+
                     ctx.save();
                     ctx.scale(outputScale, outputScale);
                     ctx.fillStyle = '#ffffff';
@@ -631,15 +664,24 @@ export default class ExternalPDFPlugin extends Plugin {
 
             this.createErrorElement(container, `Failed to load PDF: ${error.message || 'Unknown error'}`);
 
+            // [CHANGED] Use DOM API instead of innerHTML for fallback links
             if (pdfDataSource.type === 'url') {
                 const fallbackLink = container.createEl('p', { cls: 'external-pdf-fallback' });
-                fallbackLink.innerHTML = `Try opening: <a href="${pdfDataSource.url}" target="_blank" rel="noopener noreferrer">${pdfDataSource.url}</a>`;
+                fallbackLink.appendText('Try opening: ');
+                fallbackLink.createEl('a', {
+                    text: pdfDataSource.url,
+                    href: this.getDirectDownloadURL(pdfDataSource.url),
+                    attr: { 'target': '_blank', 'rel': 'noopener noreferrer' }
+                });
             } else if (pdfDataSource.type === 'vaultLocal') {
                 const localFileNote = container.createEl('p', { cls: 'external-pdf-fallback' });
-                localFileNote.innerHTML = `Problem with vault file: <code>${pdfDataSource.file.path}</code>.`;
+                localFileNote.appendText('Problem with vault file: ');
+                localFileNote.createEl('code', { text: pdfDataSource.file.path });
             } else if (pdfDataSource.type === 'absoluteLocal') {
                 const absFileNote = container.createEl('p', { cls: 'external-pdf-fallback' });
-                absFileNote.innerHTML = `Problem with absolute path file: <code>${pdfDataSource.path}</code>.`;
+                absFileNote.appendText('Problem with absolute path file: ');
+                absFileNote.createEl('code', { text: pdfDataSource.path });
+                absFileNote.appendText('.');
             }
         }
     }

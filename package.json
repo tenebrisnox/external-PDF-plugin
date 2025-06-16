@@ -1,6 +1,6 @@
 {
   "name": "external-pdf",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Embed external PDF files in notes without storing the files in your vault.",
   "main": "main.js",
   "scripts": {
