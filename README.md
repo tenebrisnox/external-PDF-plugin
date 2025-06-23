@@ -5,6 +5,8 @@
 
 This plugin lets you embed PDF files hosted online in your Obsidian notes without storing them in your vault. It also allows embedding from local files: either relative to the Obsidian vault or by absolute path (desktop only). It works on mobile devices, too.
 
+![external-pdf-splash |300](https://github.com/user-attachments/assets/16a41a89-adc3-4470-8b61-f21d84998a15)
+
 ## How To Use
 ### For External PDFs (HTTPS URLs):
 ````
