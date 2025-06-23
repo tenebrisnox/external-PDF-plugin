@@ -1,4 +1,5 @@
 # External PDF
+![external-pdf-logo](https://github.com/user-attachments/assets/6ad69920-dc8e-45cb-b6c8-5b0f03e2d2fb)
 
 **Embed external PDFs directly into your notes with full viewer controls.**
 
